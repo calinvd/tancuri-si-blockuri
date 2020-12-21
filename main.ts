@@ -83,7 +83,7 @@ function tankOrientation (tank: Sprite, orientation: string) {
             . . . . . . . . . . . . . . . . 
             `)
     }
-    sprites.setDataString(tank_01, "orientation", orientation)
+    sprites.setDataString(tank, "orientation", orientation)
     tankColorise(tank, sprites.readDataNumber(tank, "tankID"))
 }
 function tankChangeScore (tank: Sprite, score: number) {
@@ -97,8 +97,56 @@ function tankChangeScore (tank: Sprite, score: number) {
         info.player4.changeScoreBy(score)
     }
 }
+function tankRandomDecision (tank: Sprite, _type: string) {
+    leastPosibilities = []
+    if (_type == "shoot") {
+        tile_01 = myTiles.tile4
+        tile02 = myTiles.tile2
+    } else if (_type == "walk") {
+        tile_01 = sprites.castle.tilePath5
+        tile02 = myTiles.tile1
+    }
+    if (tank.tileKindAt(TileDirection.Top, tile_01) || tank.tileKindAt(TileDirection.Top, tile02)) {
+        leastPosibilities.push("top")
+    }
+    if (tank.tileKindAt(TileDirection.Bottom, tile_01) || tank.tileKindAt(TileDirection.Bottom, tile02)) {
+        leastPosibilities.push("bottom")
+    }
+    if (tank.tileKindAt(TileDirection.Left, tile_01) || tank.tileKindAt(TileDirection.Left, tile02)) {
+        leastPosibilities.push("left")
+    }
+    if (tank.tileKindAt(TileDirection.Right, tile_01) || tank.tileKindAt(TileDirection.Right, tile02)) {
+        leastPosibilities.push("right")
+    }
+    if (leastPosibilities.length == 0) {
+        leastPosibilities.push("clear")
+    }
+    return leastPosibilities[randint(0, leastPosibilities.length - 1)]
+}
+function tankMove (tank: Sprite, orientation: string) {
+    if (orientation == "up") {
+        tank.vy += -20
+    } else if (orientation == "down") {
+        tank.vy += 20
+    } else if (orientation == "left") {
+        tank.vx += -20
+    } else if (orientation == "right") {
+        tank.vx += 20
+    }
+}
 controller.A.onEvent(ControllerButtonEvent.Pressed, function () {
     tankShot(tank_01)
+})
+sprites.onOverlap(SpriteKind.Projectile, SpriteKind.Player, function (sprite, otherSprite) {
+    if (sprites.readDataNumber(sprite, "tankID") != sprites.readDataNumber(otherSprite, "tankID")) {
+        tankChangeLife(otherSprite, -1)
+        tankChangeScore(sprite, 40)
+        if (sprites.readDataNumber(otherSprite, "tankID") == 1 && info.player1.life() == 0) {
+            otherSprite.destroy(effects.fire, 500)
+            tankChangeScore(sprite, 10)
+        }
+        sprite.destroy(effects.fire, 500)
+    }
 })
 function tankColorise (tank: Sprite, tankID: number) {
     if (tankID == 1) {
@@ -141,10 +189,9 @@ function tankPlance (tank: Sprite) {
 }
 scene.onHitWall(SpriteKind.Projectile, function (sprite, location) {
     if (tiles.tileAtLocationEquals(location, myTiles.tile4)) {
-        let mySprite: Sprite = null
         tiles.setWallAt(location, false)
         tiles.setTileAt(location, sprites.castle.tilePath5)
-        tankChangeScore(mySprite, 5)
+        tankChangeScore(sprite, 5)
     }
     sprite.destroy()
 })
@@ -156,8 +203,9 @@ function tankShot (tank: Sprite) {
             f 2 
             `, SpriteKind.Projectile)
         sprProjectile.setPosition(tank.x, tank.y)
-        sprites.setDataNumber(tank, "tankID", sprites.readDataNumber(tank, "tankID"))
+        sprites.setDataNumber(sprProjectile, "tankID", sprites.readDataNumber(tank, "tankID"))
     }
+    console.log("" + sprites.readDataNumber(tank, "tankID") + "-" + sprites.readDataString(tank, "orientation"))
     if (sprites.readDataString(tank, "orientation") == "up") {
         sprProjectile.setPosition(tank.x, tank.y - 7)
         sprProjectile.setVelocity(0, projectileSpeed * -1)
@@ -191,12 +239,9 @@ function tankChangeLife (tank: Sprite, life: number) {
 }
 sprites.onOverlap(SpriteKind.Projectile, SpriteKind.Enemy, function (sprite, otherSprite) {
     if (sprites.readDataNumber(sprite, "tankID") != sprites.readDataNumber(otherSprite, "tankID")) {
+        console.log("" + sprites.readDataNumber(sprite, "tankID") + "-" + sprites.readDataNumber(otherSprite, "tankID"))
         tankChangeLife(otherSprite, -1)
         tankChangeScore(sprite, 40)
-        if (sprites.readDataNumber(otherSprite, "tankID") == 1 && info.player1.life() == 0) {
-            otherSprite.destroy(effects.fire, 500)
-            tankChangeScore(sprite, 10)
-        }
         if (sprites.readDataNumber(otherSprite, "tankID") == 2 && info.player2.life() == 0) {
             otherSprite.destroy(effects.fire, 500)
             tankChangeScore(sprite, 10)
@@ -209,14 +254,20 @@ sprites.onOverlap(SpriteKind.Projectile, SpriteKind.Enemy, function (sprite, oth
             otherSprite.destroy(effects.fire, 500)
             tankChangeScore(sprite, 10)
         }
+        sprite.destroy(effects.fire, 500)
     }
-    sprite.destroy(effects.fire, 500)
 })
+let setRandomOrientation = ""
+let setRandomShoot = ""
+let tanks: Sprite[] = []
 let sprProjectile: Sprite = null
 let randomStartLocation: tiles.Location = null
 let startLocations: tiles.Location[] = []
 let randomLocation: tiles.Location = null
 let wallLocationList: tiles.Location[] = []
+let tile02: Image = null
+let tile_01: Image = null
+let leastPosibilities: string[] = []
 let tank_01: Sprite = null
 let projectileSpeed = 0
 projectileSpeed = 80
@@ -306,5 +357,23 @@ game.onUpdate(function () {
         tankOrientation(tank_01, "right")
     } else if (controller.player1.isPressed(ControllerButton.Left)) {
         tankOrientation(tank_01, "left")
+    }
+})
+game.onUpdateInterval(randint(400, 600), function () {
+    tanks = sprites.allOfKind(SpriteKind.Enemy)
+    for (let value of tanks) {
+        setRandomShoot = tankRandomDecision(value, "shoot")
+        if (setRandomShoot == "clear") {
+            setRandomOrientation = tankRandomDecision(value, "walk")
+            tankOrientation(value, setRandomOrientation)
+            tankMove(value, setRandomOrientation)
+            console.log(setRandomOrientation)
+            if (Math.percentChance(50)) {
+                tankShot(value)
+            }
+        } else {
+            tankOrientation(value, setRandomShoot)
+            tankShot(value)
+        }
     }
 })
